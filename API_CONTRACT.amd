@@ -1,0 +1,42 @@
+# SplitPay API Contract — FROZEN v1.0
+
+Base URL (dev): http://<LAPTOP_LAN_IP>:3000
+All requests/responses are JSON.
+
+## POST /auth/login
+Req:  { "phone": "9876543210" }
+Res:  { "token": "mock-token-U001", "user": { "id": "U001", "upi_id": "demo.user@mockupi", "balance": 50000.00 } }
+Err 401: { "error": "Unknown phone" }
+
+## GET /wallet?userId=U001
+Res:  { "balance": 50000.00, "upi_id": "demo.user@mockupi" }
+
+## GET /merchant/lookup?pa=cafe.mocha@mockupi
+Res 200: { "pa": "cafe.mocha@mockupi", "pn": "Cafe Mocha", "mc": "5812" }
+Res 404: { "error": "Merchant not found" }
+
+## POST /pay
+Req:  { "userId": "U001", "merchantPa": "cafe.mocha@mockupi", "totalAmount": 6500.00, "pin": "1234" }
+Res 200: {
+  "parentId": "PAY1699999999999",
+  "status": "SUCCESS",
+  "totalAmount": 6500.00,
+  "children": [
+    { "txnId": "PAY1699999999999-0", "amount": 2000.00, "mdr": 0, "status": "SUCCESS" },
+    { "txnId": "PAY1699999999999-1", "amount": 2000.00, "mdr": 0, "status": "SUCCESS" },
+    { "txnId": "PAY1699999999999-2", "amount": 2000.00, "mdr": 0, "status": "SUCCESS" },
+    { "txnId": "PAY1699999999999-3", "amount":  500.00, "mdr": 0, "status": "SUCCESS" }
+  ],
+  "newBalance": 43500.00
+}
+Err 400: { "error": "Insufficient balance" | "Invalid PIN" | "Amount must be > 0" }
+Err 422: { "error": "Amount requires N transactions, exceeds limit of 20" }
+
+## GET /payments?userId=U001
+Res: [ { "parentId": "...", "merchantPa": "...", "totalAmount": 6500.00, "status": "SUCCESS", "createdAt": "..." } ]
+
+## GET /payments/:parentId
+Res: { "parent": { ... }, "children": [ { ... } ] }
+
+## GET /merchant/received?pa=cafe.mocha@mockupi
+Res: [ { "parentId": "...", "totalAmount": 6500.00, "createdAt": "..." } ]
