@@ -13,6 +13,3 @@ cd server && npm install && node initDb.js && node app.js
 ### Frontend
 cd app && flutter pub get && flutter run
 
-## Team
-- Member 1: Backend (server/, splitEngine.js)
-- Member 2: Frontend (app/)
