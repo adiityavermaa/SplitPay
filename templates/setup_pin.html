@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Account</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style> 
+        body { font-family: 'Outfit', sans-serif; background-color: #050505; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; } 
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); } 
+        .role-card { cursor: pointer; border: 2px solid rgba(255,255,255,0.1); transition: all 0.3s; }
+        .role-card.selected { border-color: #00ff88; background: rgba(0, 255, 136, 0.1); box-shadow: 0 0 15px rgba(0, 255, 136, 0.2); }
+    </style>
+</head>
+<body>
+    <div class="glass w-full max-w-md p-8 rounded-3xl text-center relative z-10">
+        <h1 class="text-2xl font-bold mb-1">Create Account</h1>
+        <p class="text-xs text-gray-400 mb-6">Choose how you want to use SplitPay</p>
+        
+        <!-- Role Selection -->
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <!-- Customer Card -->
+            <div class="role-card selected rounded-xl p-4 flex flex-col items-center" id="card-customer" onclick="selectRole('customer')">
+                <svg class="w-8 h-8 mb-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                <span class="font-bold text-sm">Customer</span>
+                <span class="text-[10px] text-gray-400 text-center mt-1">Pay & Split</span>
+            </div>
+            
+            <!-- Merchant Card -->
+            <div class="role-card rounded-xl p-4 flex flex-col items-center" id="card-merchant" onclick="selectRole('merchant')">
+                <svg class="w-8 h-8 mb-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                <span class="font-bold text-sm">Merchant</span>
+                <span class="text-[10px] text-gray-400 text-center mt-1">Receive Payments</span>
+            </div>
+        </div>
+
+        <p class="text-xs text-gray-400 mb-2">Set a 4-digit UPI PIN</p>
+        <input type="password" id="pin" placeholder="••••" maxlength="4" class="w-full bg-black/50 border border-white/10 rounded-xl py-4 px-4 text-white text-center tracking-[1em] text-2xl focus:outline-none focus:border-green-400 mb-6 transition">
+        
+        <button onclick="savePin()" class="w-full bg-gradient-to-r from-green-400 to-blue-500 text-black font-bold py-3 rounded-xl hover:shadow-[0_0_20px_rgba(0,255,136,0.5)] transition">Complete Setup</button>
+    </div>
+
+    <script>
+        let selectedRole = 'customer';
+
+        function selectRole(role) {
+            selectedRole = role;
+            // Reset classes
+            document.getElementById('card-customer').classList.remove('selected');
+            document.getElementById('card-merchant').classList.remove('selected');
+            // Add selected class to clicked card
+            document.getElementById('card-' + role).classList.add('selected');
+        }
+
+        function savePin() {
+            const pin = document.getElementById('pin').value;
+            if(pin.length !== 4 || isNaN(pin)) {
+                return alert("PIN must be exactly 4 digits");
+            }
+            
+            fetch('/api/set-pin', {
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({pin: pin, role: selectedRole})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    gsap.to("body", { duration: 0.4, opacity: 0, onComplete: () => {
+                        window.location.href = data.redirect; 
+                    }});
+                }
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,38 +1,45 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
-import sqlite3
+from models import db, User, Transaction
+from sqlalchemy import inspect
 import time
+import random
 import os
 
 app = Flask(__name__)
 app.secret_key = 'splitpay_super_secret_key'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///splitpay.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- DATABASE SETUP ---
-def init_db():
-    conn = sqlite3.connect('splitpay.db')
-    c = conn.cursor()
-    # Users table
-    c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (phone TEXT PRIMARY KEY, 
-                  balance REAL DEFAULT 50000.0,
-                  upi_pin TEXT DEFAULT NULL,
-                  upi_id TEXT UNIQUE)''')
-    # Transactions table
-    c.execute('''CREATE TABLE IF NOT EXISTS transactions
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  sender TEXT, 
-                  receiver TEXT, 
-                  amount REAL, 
-                  status TEXT,
-                  timestamp TEXT)''')
-    
-    # Add a default merchant (Cafe Mocha) so you have someone to pay
-    c.execute("INSERT OR IGNORE INTO users (phone, upi_id, balance) VALUES ('9999999999', 'cafe.mocha@mockupi', 0.0)")
-    conn.commit()
-    conn.close()
+db.init_app(app)
 
-# Initialize DB when app starts
+# --- DATABASE SETUP & AUTO-RESET ---
 with app.app_context():
-    init_db()
+    db_path = 'instance/splitpay.db'
+    reset_db = False
+    
+    if os.path.exists(db_path):
+        inspector = inspect(db.engine)
+        try:
+            columns = [col['name'] for col in inspector.get_columns('transactions')]
+            # If we add new columns in the future, add them to this list
+            if 'split_utrs' not in columns or 'txn_id' not in columns:
+                reset_db = True
+        except Exception:
+            # If the table doesn't exist yet, we just create it
+            reset_db = False
+            
+    if reset_db:
+        print("⚠️ Schema changed! Resetting database...")
+        db.drop_all() 
+        db.create_all() 
+    else:
+        db.create_all() 
+
+    # Seed default Merchant (Cafe Mocha)
+    if not User.query.filter_by(upi_id='cafe.mocha@mockupi').first():
+        merchant = User(phone='9999999999', upi_id='cafe.mocha@mockupi', balance=0.0, role='merchant')
+        db.session.add(merchant)
+        db.session.commit()
 
 # --- ROUTES ---
 @app.route('/')
@@ -41,17 +48,21 @@ def root():
         return redirect(url_for('login_page'))
     if not session.get('has_pin'):
         return redirect(url_for('setup_pin_page'))
-    return render_template('index.html', phone=session['user_phone'])
+    
+    user = User.query.filter_by(phone=session['user_phone']).first()
+    if not user:
+        session.clear()
+        return redirect(url_for('login_page'))
+        
+    # Fetch recent transactions for the customer
+    txns = Transaction.query.filter_by(sender_upi=user.upi_id).order_by(Transaction.id.desc()).limit(10).all()
+    return render_template('index.html', transactions=txns)
 
 @app.route('/login')
-def login_page():
-    return render_template('login.html')
+def login_page(): return render_template('login.html')
 
 @app.route('/setup-pin')
-def setup_pin_page():
-    if 'user_phone' not in session:
-        return redirect(url_for('login_page'))
-    return render_template('setup_pin.html')
+def setup_pin_page(): return render_template('setup_pin.html')
 
 @app.route('/logout')
 def logout():
@@ -72,77 +83,63 @@ def verify_otp():
     if otp != "123456":
         return jsonify({"status": "error", "message": "Invalid OTP"}), 400
         
-    conn = sqlite3.connect('splitpay.db')
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE phone = ?", (phone,))
-    user = c.fetchone()
+    user = User.query.filter_by(phone=phone).first()
     
     if not user:
         upi_id = f"user{phone[-4:]}@mockupi"
-        c.execute("INSERT INTO users (phone, upi_id) VALUES (?, ?)", (phone, upi_id))
-        conn.commit()
-        c.execute("SELECT * FROM users WHERE phone = ?", (phone,))
-        user = c.fetchone()
-    conn.close()
+        user = User(phone=phone, upi_id=upi_id)
+        db.session.add(user)
+        db.session.commit()
     
     session['user_phone'] = phone
-    session['upi_id'] = user[3]
-    session['has_pin'] = True if user[2] else False
+    session['upi_id'] = user.upi_id
+    session['has_pin'] = True if user.upi_pin else False
+    session['role'] = user.role
     
-    if user[2]:
-        return jsonify({"status": "success", "redirect": "/"})
-    else:
-        return jsonify({"status": "success", "redirect": "/setup-pin"})
+    if user.upi_pin:
+        return jsonify({"status": "success", "redirect": "/" if user.role == 'customer' else "/merchant"})
+    return jsonify({"status": "success", "redirect": "/setup-pin"})
 
 @app.route('/api/set-pin', methods=['POST'])
 def set_pin():
-    pin = request.json.get('pin')
-    conn = sqlite3.connect('splitpay.db')
-    c = conn.cursor()
-    c.execute("UPDATE users SET upi_pin = ? WHERE phone = ?", (pin, session['user_phone']))
-    conn.commit()
-    conn.close()
+    data = request.json
+    user = User.query.filter_by(phone=session['user_phone']).first()
+    user.upi_pin = data.get('pin')
+    user.role = data.get('role', 'customer')
+    db.session.commit()
+    
     session['has_pin'] = True
-    return jsonify({"status": "success", "redirect": "/"})
+    session['role'] = user.role
+    
+    redirect_url = "/merchant" if user.role == 'merchant' else "/"
+    return jsonify({"status": "success", "redirect": redirect_url})
 
 @app.route('/api/get-balance')
 def get_balance():
-    conn = sqlite3.connect('splitpay.db')
-    c = conn.cursor()
-    c.execute("SELECT balance, upi_id FROM users WHERE phone = ?", (session['user_phone'],))
-    user = c.fetchone()
-    conn.close()
-    return jsonify({"balance": user[0], "upi_id": user[1]})
+    user = User.query.filter_by(phone=session['user_phone']).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify({"balance": user.balance, "upi_id": user.upi_id})
 
 # --- PAYMENT API & SPLIT ENGINE ---
 @app.route('/api/pay', methods=['POST'])
 def process_payment():
     data = request.json
-    receiver = data.get('receiver')
+    receiver_upi = data.get('receiver')
     amount = float(data.get('amount'))
     pin = data.get('pin')
     
-    conn = sqlite3.connect('splitpay.db')
-    c = conn.cursor()
+    sender = User.query.filter_by(phone=session['user_phone']).first()
+    receiver = User.query.filter_by(upi_id=receiver_upi).first()
     
-    c.execute("SELECT balance, upi_pin FROM users WHERE phone = ?", (session['user_phone'],))
-    sender_data = c.fetchone()
-    
-    if not sender_data or sender_data[1] != pin:
-        conn.close()
+    if not sender or sender.upi_pin != pin:
         return jsonify({"status": "error", "message": "Incorrect UPI PIN"}), 400
-    if sender_data[0] < amount:
-        conn.close()
+    if not receiver:
+        return jsonify({"status": "error", "message": "Receiver not found"}), 404
+    if sender.balance < amount:
         return jsonify({"status": "error", "message": "Insufficient Balance"}), 400
         
-    c.execute("UPDATE users SET balance = balance - ? WHERE phone = ?", (amount, session['user_phone']))
-    c.execute("UPDATE users SET balance = balance + ? WHERE upi_id = ?", (amount, receiver))
-    c.execute("INSERT INTO transactions (sender, receiver, amount, status, timestamp) VALUES (?, ?, ?, 'SUCCESS', ?)",
-              (session['upi_id'], receiver, amount, time.strftime("%H:%M:%S")))
-    conn.commit()
-    conn.close()
-    
-    # AI SPLIT ENGINE
+    # 1. CALCULATE SPLIT
     split_chunks = []
     remaining = amount
     while remaining > 2000:
@@ -151,7 +148,67 @@ def process_payment():
     if remaining > 0:
         split_chunks.append(round(remaining, 2))
         
-    return jsonify({"status": "success", "split": split_chunks})
+    split_string = ",".join(str(x) for x in split_chunks)
+
+    # 2. GENERATE UNIQUE UTRs FOR EACH CHUNK
+    utrs = []
+    for _ in split_chunks:
+        utr = f"UTR{int(time.time())}{random.randint(1000, 9999)}"
+        utrs.append(utr)
+    utr_string = ",".join(utrs)
+
+    # 3. TRANSFER FUNDS & SAVE
+    sender.balance -= amount
+    receiver.balance += amount
+    
+    txn = Transaction(
+        sender_upi=sender.upi_id, 
+        receiver_upi=receiver.upi_id, 
+        amount=amount, 
+        split_data=split_string,
+        split_utrs=utr_string 
+    )
+    db.session.add(txn)
+    db.session.commit()
+    
+    return jsonify({
+        "status": "success", 
+        "split": split_chunks, 
+        "utrs": utrs 
+    })
+
+# --- MERCHANT ROUTES ---
+@app.route('/merchant')
+def merchant_page():
+    if 'user_phone' not in session:
+        return redirect(url_for('login_page'))
+    
+    user = User.query.filter_by(phone=session['user_phone']).first()
+    if not user or user.role != 'merchant':
+        return "Access Denied. You are not a merchant.", 403
+        
+    return render_template('merchant.html', merchant_upi=user.upi_id)
+
+@app.route('/api/merchant/received')
+def merchant_received():
+    if 'user_phone' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    user = User.query.filter_by(phone=session['user_phone']).first()
+    
+    txns = Transaction.query.filter_by(receiver_upi=user.upi_id).order_by(Transaction.id.desc()).all()
+    
+    result = []
+    for t in txns:
+        result.append({
+            "txn_id": t.txn_id,
+            "sender": t.sender_upi.split('@')[0],
+            "amount": t.amount,
+            "date": t.timestamp.strftime('%b %d, %I:%M %p'),
+            "split_data": t.split_data,
+            "split_utrs": t.split_utrs
+        })
+    return jsonify(result)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)

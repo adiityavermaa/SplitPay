@@ -2,204 +2,568 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SplitPay | Futuristic UPI</title>
-    <!-- Tailwind CSS -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SplitPay | Wallet</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- GSAP for animations -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-    <!-- QR Scanner Library -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Outfit', sans-serif;
-            background-color: #050505;
-            color: white;
-            overflow: hidden;
-        }
-        /* Crazy animated background gradients */
-        .bg-glow {
-            position: absolute;
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle, rgba(0, 255, 128, 0.15) 0%, rgba(0,0,0,0) 70%);
-            top: -200px;
-            left: -200px;
-            z-index: -1;
-            border-radius: 50%;
-            animation: pulse 8s infinite alternate;
-        }
-        .bg-glow-2 {
-            position: absolute;
-            width: 500px;
-            height: 500px;
-            background: radial-gradient(circle, rgba(138, 43, 226, 0.15) 0%, rgba(0,0,0,0) 70%);
-            bottom: -100px;
-            right: -100px;
-            z-index: -1;
-            border-radius: 50%;
-            animation: pulse 10s infinite alternate-reverse;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 0.5; }
-            100% { transform: scale(1.2); opacity: 1; }
-        }
-        /* Glassmorphism Card */
-        .glass-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
-        }
-        /* Neon Button */
-        .neon-btn {
-            background: linear-gradient(90deg, #00ff88 0%, #00d4ff 100%);
-            color: #000;
-            font-weight: 800;
-            transition: all 0.3s ease;
-            box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
-        }
-        .neon-btn:hover {
-            box-shadow: 0 0 30px rgba(0, 255, 136, 0.8);
-            transform: translateY(-2px);
-        }
-        /* Scanner Container */
-        #reader {
-            border-radius: 20px;
-            overflow: hidden;
-            border: 2px solid rgba(0, 255, 136, 0.3);
-        }
-        #reader video {
-            border-radius: 18px;
-            object-fit: cover;
-        }
+        body { font-family: 'Outfit', sans-serif; background-color: #000000; color: white; overflow-x: hidden; padding-bottom: 80px; }
+        .glass-card { background: #121212; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); }
+        .wallet-card { background: linear-gradient(145deg, #2a2a2a, #121212); border-radius: 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        
+        /* Custom Keypad & Bottom Sheet */
+        #payment-sheet { transform: translateY(100%); }
+        .key-btn { background: rgba(255,255,255,0.05); border-radius: 16px; font-size: 1.5rem; font-weight: 600; transition: 0.1s; color: white; }
+        .key-btn:active { background: rgba(255,255,255,0.2); transform: scale(0.95); }
+        .bottom-nav { background: #000000; border-top: 1px solid rgba(255,255,255,0.05); }
+        
+        /* Pulsing effect for the Scan button */
+        @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); } }
+        .pulse-scan { animation: pulse-ring 2s infinite; border-radius: 50%; }
     </style>
 </head>
-<body class="flex items-center justify-center min-h-screen relative">
+<body class="relative">
 
-    <!-- Background Effects -->
-    <div class="bg-glow"></div>
-    <div class="bg-glow-2"></div>
-
-    <!-- Main App Container -->
-    <div class="glass-card w-full max-w-md p-8 rounded-3xl relative z-10" id="app-container">
+    <!-- ================= MAIN DASHBOARD ================= -->
+    <div class="w-full max-w-md mx-auto p-5" id="main-dashboard">
         
-        <!-- Header -->
-        <div class="flex justify-between items-center mb-6">
-            <div>
-                <h1 class="text-3xl font-extrabold tracking-tight">SplitPay</h1>
-                <p class="text-xs text-gray-400 mt-1">Smart UPI Routing</p>
+        <!-- Header: Search & Scan -->
+        <div class="flex items-center justify-between mb-6 pt-4">
+            <div class="flex-1 mr-4 relative">
+                <svg class="w-5 h-5 absolute left-3 top-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <input type="text" id="search-bar" onkeyup="filterTransactions()" placeholder="Search transactions..." class="w-full bg-[#121212] text-sm text-gray-300 rounded-full py-2.5 pl-10 pr-4 focus:outline-none border border-gray-800">
             </div>
-            <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center font-bold text-black shadow-lg shadow-green-500/30">
-                A
-            </div>
-        </div>
-
-        <!-- Balance Card -->
-        <div class="glass-card p-5 rounded-2xl mb-6 relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-24 h-24 bg-green-500/10 rounded-full blur-2xl"></div>
-            <p class="text-sm text-gray-400 mb-1">Available Balance</p>
-            <h2 class="text-4xl font-bold">₹50,000<span class="text-lg text-gray-500">.00</span></h2>
-            <p class="text-xs text-green-400 mt-2 flex items-center gap-1">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-                UPI ID: demo.user@mockupi
-            </p>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="grid grid-cols-2 gap-4 mb-6">
-            <button onclick="showScanner()" class="glass-card p-4 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-white/5 transition cursor-pointer">
-                <div class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
-                    <svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
-                </div>
-                <span class="text-sm font-semibold">Scan QR</span>
-            </button>
-            <button class="glass-card p-4 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-white/5 transition cursor-pointer">
-                <div class="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
-                    <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
-                </div>
-                <span class="text-sm font-semibold">Enter UPI ID</span>
+            <!-- TOP RIGHT: Receive Money QR -->
+            <button onclick="switchTab('payment')" class="p-2 text-white bg-[#121212] rounded-full pulse-scan">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
             </button>
         </div>
 
-        <!-- Scanner View (Hidden by default) -->
-        <div id="scanner-container" class="hidden mt-4">
-            <div id="reader" class="w-full"></div>
-            <button onclick="stopScanner()" class="mt-4 w-full glass-card py-3 rounded-xl text-sm font-semibold text-red-400 hover:bg-red-500/10 transition">Cancel Scan</button>
+        <!-- Wallet Card -->
+        <div class="wallet-card p-6 mb-6 relative overflow-hidden">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <p class="text-sm font-medium text-gray-300 mb-1">Wallet</p>
+                    <p class="text-lg font-semibold text-gray-400" id="upi-id-display">Loading...</p>
+                </div>
+                <button onclick="toggleBalance()" class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition">
+                    <svg id="eye-icon" class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                </button>
+            </div>
+            
+            <div class="mt-8 mb-4">
+                <h2 class="text-4xl font-bold tracking-tight" id="balance-display">₹0.00</h2>
+            </div>
+            
+            <div class="flex justify-between items-end">
+                <p class="text-xs text-gray-500 font-mono">Account ** 5087</p>
+                <div class="flex -space-x-2">
+                    <div class="w-6 h-6 rounded-full bg-red-500/80"></div>
+                    <div class="w-6 h-6 rounded-full bg-yellow-500/80"></div>
+                </div>
+            </div>
         </div>
 
-        <!-- Recent Transactions -->
-        <div class="mt-4">
-            <h3 class="text-sm font-semibold text-gray-400 mb-3">Recent Activity</h3>
-            <div class="space-y-3">
-                <div class="flex items-center justify-between glass-card p-3 rounded-xl">
+        <!-- Primary Action Button -->
+        <button onclick="openManualEntry()" class="w-full glass-card p-5 flex items-center justify-between hover:bg-gray-800 transition mb-6">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                </div>
+                <div class="text-left">
+                    <p class="font-semibold">Pay via UPI ID</p>
+                    <p class="text-xs text-gray-500">Send money instantly</p>
+                </div>
+            </div>
+            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+        </button>
+
+        <!-- Recent Activity -->
+        <div class="glass-card p-5 mb-4">
+            <div class="flex justify-between items-center mb-4">
+                <p class="text-sm font-semibold">Recent Transactions</p>
+                <button onclick="openHistoryModal()" class="text-xs text-gray-400 hover:text-white transition">See All</button>
+            </div>
+            <div class="space-y-4" id="transaction-list">
+                {% for txn in transactions[:3] %}
+                <div class="flex items-center justify-between transaction-item cursor-pointer hover:bg-gray-800 p-2 rounded-xl transition"
+                     data-txnid="{{ txn.txn_id }}"
+                     data-name="{{ txn.receiver_upi.split('@')[0] }}"
+                     data-amount="{{ txn.amount }}"
+                     data-date="{{ txn.timestamp.strftime('%b %d, %I:%M %p') }}"
+                     data-split="{{ txn.split_data }}"
+                     data-utrs="{{ txn.split_utrs }}"
+                     onclick="openTxnDetails(this)">
+                    
                     <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-xs">CM</div>
+                        <div class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 font-bold text-xs">To</div>
                         <div>
-                            <p class="text-sm font-semibold">Cafe Mocha</p>
-                            <p class="text-xs text-gray-500">Today, 10:45 AM</p>
+                            <p class="text-sm font-semibold txn-name">{{ txn.receiver_upi.split('@')[0] }}</p>
+                            <p class="text-xs text-gray-500">{{ txn.timestamp.strftime('%I:%M %p') }}</p>
                         </div>
                     </div>
-                    <p class="text-sm font-bold text-red-400">- ₹6,500</p>
+                    <p class="text-sm font-bold text-red-400">- ₹{{ txn.amount }}</p>
                 </div>
+                {% else %}
+                <p class="text-xs text-gray-500 text-center py-4">No recent transactions</p>
+                {% endfor %}
             </div>
         </div>
     </div>
 
-    <!-- Javascript Logic -->
-    <script>
-        let html5QrCode;
+    <!-- ================= RECEIVE MONEY SCREEN (Hidden by default) ================= -->
+    <div class="w-full max-w-md mx-auto p-5 hidden flex-col items-center justify-center h-[80vh]" id="payment-tab">
+        <h2 class="text-2xl font-bold mb-2">Receive Money</h2>
+        <p class="text-sm text-gray-400 mb-8">Scan this QR code to pay me</p>
+        
+        <div class="bg-white p-4 rounded-3xl mb-8 shadow-[0_0_40px_rgba(255,255,255,0.1)]">
+            <div id="my-qr-code"></div>
+        </div>
+        
+        <p class="text-lg font-bold mb-1" id="my-upi-id-display">Loading...</p>
+        <p class="text-xs text-gray-500">SplitPay Merchant/Customer</p>
+        
+        <button onclick="switchTab('home')" class="mt-12 px-8 py-3 bg-gray-800 rounded-full font-bold hover:bg-gray-700 transition">Back to Home</button>
+    </div>
 
-        // Function to show scanner
-        function showScanner() {
-            // Animate UI out, scanner in
-            gsap.to("#app-container", { duration: 0.3, scale: 0.95, opacity: 0, onComplete: () => {
-                document.getElementById("app-container").classList.add("hidden");
-                document.getElementById("scanner-container").classList.remove("hidden");
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav fixed bottom-0 left-0 w-full flex justify-around items-center py-4 z-40 max-w-md mx-auto right-0">
+        <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center text-white">
+            <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+            <span class="text-[10px]">Home</span>
+        </button>
+        <!-- BOTTOM MIDDLE: Scan QR -->
+        <button onclick="startScanner()" id="nav-payment" class="flex flex-col items-center text-gray-500 hover:text-white transition">
+            <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
+            <span class="text-[10px]">Scan</span>
+        </button>
+        <a href="/logout" class="flex flex-col items-center text-gray-500 hover:text-white transition">
+            <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+            <span class="text-[10px]">Logout</span>
+        </a>
+    </div>
+
+    <!-- ================= MODALS & OVERLAYS ================= -->
+
+    <!-- History Modal -->
+    <div id="history-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col justify-end">
+        <div class="bg-[#121212] w-full h-[80vh] rounded-t-3xl p-6 border-t border-gray-800 flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold">Transaction History</h2>
+                <button onclick="closeHistoryModal()" class="p-2 bg-gray-800 rounded-full text-gray-400 hover:text-white"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="overflow-y-auto space-y-4 pb-10">
+                {% for txn in transactions %}
+                <div class="flex items-center justify-between p-3 rounded-xl hover:bg-gray-800 transition cursor-pointer"
+                     data-txnid="{{ txn.txn_id }}"
+                     data-name="{{ txn.receiver_upi.split('@')[0] }}"
+                     data-amount="{{ txn.amount }}"
+                     data-date="{{ txn.timestamp.strftime('%b %d, %I:%M %p') }}"
+                     data-split="{{ txn.split_data }}"
+                     onclick="openTxnDetails(this)">
+                    
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 font-bold text-xs">To</div>
+                        <div>
+                            <p class="text-sm font-semibold">{{ txn.receiver_upi.split('@')[0] }}</p>
+                            <p class="text-xs text-gray-500">{{ txn.timestamp.strftime('%b %d, %I:%M %p') }}</p>
+                        </div>
+                    </div>
+                    <p class="text-sm font-bold text-red-400">- ₹{{ txn.amount }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction Details Modal (The Split Breakdown) -->
+    <div id="txn-modal" class="hidden fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+        <div class="bg-[#121212] w-full max-w-sm rounded-3xl p-6 border border-gray-800 relative shadow-2xl">
+            <button onclick="document.getElementById('txn-modal').classList.add('hidden')" class="absolute top-4 right-4 text-gray-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            
+            <div class="text-center mb-6 mt-2">
+                <div class="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                </div>
+                <h2 class="text-3xl font-bold text-white mb-1">₹<span id="modal-amount">0</span></h2>
+                <p class="text-sm text-gray-400">Paid to <span id="modal-receiver" class="font-bold text-white">Name</span></p>
+                <p class="text-xs text-gray-500 mt-1" id="modal-date">Date</p>
+                <!-- NEW: Parent Transaction ID -->
+                <p class="text-xs text-gray-500 mt-1 font-mono">TXN ID: <span id="modal-txnid" class="text-gray-300 font-bold">...</span></p>
+            </div>
+
+            <div class="bg-black/50 p-4 rounded-xl border border-gray-800 mb-6">
+                <p class="text-xs text-gray-400 mb-3 uppercase tracking-wider font-bold">SplitPay Engine Breakdown</p>
+                <div class="space-y-2" id="modal-split-container">
+                    <!-- Split chips will be injected here by JS -->
+                </div>
+                <p class="text-[10px] text-green-400 mt-3 flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    Auto-Split applied successfully
+                </p>
+            </div>
+
+            <button onclick="document.getElementById('txn-modal').classList.add('hidden')" class="w-full bg-gray-800 text-white font-bold py-3 rounded-xl hover:bg-gray-700 transition">Close</button>
+        </div>
+    </div>
+
+    <!-- Manual Entry Modal -->
+    <div id="manual-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+        <div class="glass-card w-full max-w-sm p-6 rounded-3xl border border-gray-700">
+            <h2 class="text-xl font-bold mb-4 text-center">Pay via UPI ID</h2>
+            <input type="text" id="manual-upi" placeholder="cafe.mocha@mockupi" class="w-full bg-black border border-gray-700 rounded-xl py-3 px-4 text-white focus:outline-none mb-4 text-center">
+            <div class="flex gap-3">
+                <button onclick="closeManualEntry()" class="flex-1 bg-gray-800 text-white font-bold py-3 rounded-xl">Cancel</button>
+                <button onclick="processManualEntry()" class="flex-1 bg-white text-black font-bold py-3 rounded-xl">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scanner Overlay -->
+    <div id="scanner-container" class="hidden fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center p-6">
+        <div id="reader" class="w-full max-w-sm rounded-2xl overflow-hidden border border-green-500/30 mb-8 relative"></div>
+        <button type="button" onclick="event.preventDefault(); forceStopScanner();" class="relative z-[10000] w-full max-w-sm bg-red-600 text-white font-bold py-4 rounded-xl shadow-[0_0_20px_rgba(255,0,0,0.4)] transition active:scale-95">
+            Cancel Scan
+        </button>
+    </div>
+
+    <!-- Payment Bottom Sheet (Amount + PIN) -->
+    <div id="payment-sheet" class="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md flex flex-col justify-end transition-transform duration-300">
+        <div class="bg-[#121212] w-full rounded-t-3xl p-6 pb-10 border-t border-gray-800">
+            
+            <div class="flex justify-between items-center mb-6">
+                <button onclick="closePaymentSheet()" class="text-gray-400 hover:text-white bg-gray-800 p-2 rounded-full">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                </button>
+                <div class="text-center">
+                    <p class="text-xs text-gray-500">Paying to</p>
+                    <p class="font-bold text-white" id="payee-name">cafe.mocha@mockupi</p>
+                </div>
+                <div class="w-9"></div>
+            </div>
+
+            <div id="step-amount">
+                <div class="text-center mb-8">
+                    <span class="text-4xl text-gray-500">₹</span>
+                    <span id="display-amount" class="text-5xl font-extrabold text-white">0</span>
+                </div>
+                <div class="grid grid-cols-3 gap-3 mb-6">
+                    <button onclick="pressKey('1')" class="key-btn py-4">1</button>
+                    <button onclick="pressKey('2')" class="key-btn py-4">2</button>
+                    <button onclick="pressKey('3')" class="key-btn py-4">3</button>
+                    <button onclick="pressKey('4')" class="key-btn py-4">4</button>
+                    <button onclick="pressKey('5')" class="key-btn py-4">5</button>
+                    <button onclick="pressKey('6')" class="key-btn py-4">6</button>
+                    <button onclick="pressKey('7')" class="key-btn py-4">7</button>
+                    <button onclick="pressKey('8')" class="key-btn py-4">8</button>
+                    <button onclick="pressKey('9')" class="key-btn py-4">9</button>
+                    <button onclick="pressKey('.')" class="key-btn py-4">.</button>
+                    <button onclick="pressKey('0')" class="key-btn py-4">0</button>
+                    <button onclick="deleteKey()" class="key-btn py-4 flex items-center justify-center text-red-400">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414-6.414A2 2 0 0010.828 5H19a2 2 0 012 2v10a2 2 0 01-2 2h-8.172a2 2 0 01-1.414-.586L3 12z"></path></svg>
+                    </button>
+                </div>
+                <button onclick="goToPin()" class="w-full bg-white text-black font-bold py-4 rounded-xl text-lg hover:bg-gray-200 transition">Proceed to Pay</button>
+            </div>
+
+            <div id="step-pin" class="hidden">
+                <div class="text-center mb-8">
+                    <p class="text-sm text-gray-400 mb-4">Enter 4-digit UPI PIN</p>
+                    <div class="flex justify-center gap-4 mb-4">
+                        <div class="w-4 h-4 rounded-full bg-gray-700" id="dot-0"></div>
+                        <div class="w-4 h-4 rounded-full bg-gray-700" id="dot-1"></div>
+                        <div class="w-4 h-4 rounded-full bg-gray-700" id="dot-2"></div>
+                        <div class="w-4 h-4 rounded-full bg-gray-700" id="dot-3"></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3 mb-6">
+                    <button onclick="pressPin('1')" class="key-btn py-4">1</button>
+                    <button onclick="pressPin('2')" class="key-btn py-4">2</button>
+                    <button onclick="pressPin('3')" class="key-btn py-4">3</button>
+                    <button onclick="pressPin('4')" class="key-btn py-4">4</button>
+                    <button onclick="pressPin('5')" class="key-btn py-4">5</button>
+                    <button onclick="pressPin('6')" class="key-btn py-4">6</button>
+                    <button onclick="pressPin('7')" class="key-btn py-4">7</button>
+                    <button onclick="pressPin('8')" class="key-btn py-4">8</button>
+                    <button onclick="pressPin('9')" class="key-btn py-4">9</button>
+                    <div></div>
+                    <button onclick="pressPin('0')" class="key-btn py-4">0</button>
+                    <button onclick="deletePin()" class="key-btn py-4 flex items-center justify-center text-red-400">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414-6.414A2 2 0 0010.828 5H19a2 2 0 012 2v10a2 2 0 01-2 2h-8.172a2 2 0 01-1.414-.586L3 12z"></path></svg>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Tab Switching & Receive Money QR ---
+        let myUpiId = "";
+
+        function switchTab(tab) {
+            const home = document.getElementById('main-dashboard');
+            const payment = document.getElementById('payment-tab');
+            const navHome = document.getElementById('nav-home');
+            const navPayment = document.getElementById('nav-payment');
+
+            if(tab === 'payment') {
+                home.classList.add('hidden');
+                payment.classList.remove('hidden');
+                payment.classList.add('flex');
+                navPayment.classList.replace('text-gray-500', 'text-white');
+                navHome.classList.replace('text-white', 'text-gray-500');
                 
-                // Initialize Scanner
-                html5QrCode = new Html5Qrcode("reader");
-                html5QrCode.start(
-                    { facingMode: "environment" }, 
-                    { fps: 10, qrbox: { width: 250, height: 250 } },
-                    (decodedText, decodedResult) => {
-                        // SUCCESS: QR Code detected!
-                        stopScanner();
-                        
-                        // Show a crazy success animation
-                        gsap.fromTo("body", { backgroundColor: "rgba(0,255,136,0.2)" }, { backgroundColor: "#050505", duration: 1 });
-                        
-                        // Alert the data (we will pass this to backend later)
-                        setTimeout(() => {
-                            alert("QR Scanned Successfully!\nData: " + decodedText);
-                            // window.location.href = `/pay?pa=${encodeURIComponent(decodedText)}`;
-                        }, 500);
-                    },
-                    (errorMessage) => {
-                        // Ignore scanning errors (it fires continuously)
-                    }
-                ).catch((err) => {
-                    alert("Camera Error: " + err);
-                });
-            }});
+                // Generate QR if not already generated
+                if(!document.getElementById('my-qr-code').hasChildNodes()) {
+                    new QRCode(document.getElementById("my-qr-code"), {
+                        text: `upi://pay?pa=${myUpiId}&pn=User`,
+                        width: 200, height: 200, colorDark : "#000000", colorLight : "#ffffff"
+                    });
+                }
+            } else {
+                payment.classList.add('hidden');
+                payment.classList.remove('flex');
+                home.classList.remove('hidden');
+                navHome.classList.replace('text-gray-500', 'text-white');
+                navPayment.classList.replace('text-white', 'text-gray-500');
+            }
         }
 
-        // Function to stop scanner
-        function stopScanner() {
-            if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear();
-                    gsap.to("#scanner-container", { duration: 0.3, opacity: 0, onComplete: () => {
-                        document.getElementById("scanner-container").classList.add("hidden");
-                        document.getElementById("app-container").classList.remove("hidden");
-                        gsap.to("#app-container", { duration: 0.3, scale: 1, opacity: 1 });
-                    }});
-                }).catch(err => console.log(err));
+        // --- 2. Load Data & Toggle Balance ---
+        let realBalance = 0;
+        let balanceVisible = true;
+
+        fetch('/api/get-balance').then(res => res.json()).then(data => {
+            realBalance = data.balance;
+            myUpiId = data.upi_id;
+            document.getElementById('balance-display').innerHTML = `₹${data.balance.toFixed(2)}`;
+            document.getElementById('upi-id-display').innerText = `${data.upi_id}`;
+            document.getElementById('my-upi-id-display').innerText = `${data.upi_id}`;
+        });
+
+        function toggleBalance() { 
+            balanceVisible = !balanceVisible;
+            const display = document.getElementById('balance-display');
+            const icon = document.getElementById('eye-icon');
+            if(balanceVisible) {
+                display.innerText = `₹${realBalance.toFixed(2)}`;
+                icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>`;
+            } else {
+                display.innerText = `₹ ******`;
+                icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>`;
             }
+        }
+
+        // --- 3. Search Bar Filter ---
+        function filterTransactions() {
+            const input = document.getElementById('search-bar').value.toLowerCase();
+            const items = document.querySelectorAll('.transaction-item');
+            
+            items.forEach(item => {
+                const name = item.querySelector('.txn-name').innerText.toLowerCase();
+                if(name.includes(input)) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        // --- 4. Modals ---
+        function openHistoryModal() { document.getElementById('history-modal').classList.remove('hidden'); }
+        function closeHistoryModal() { document.getElementById('history-modal').classList.add('hidden'); }
+        function openManualEntry() { document.getElementById('manual-modal').classList.remove('hidden'); }
+        function closeManualEntry() { document.getElementById('manual-modal').classList.add('hidden'); }
+        
+        function processManualEntry() {
+            const upi = document.getElementById('manual-upi').value;
+            if(!upi.includes('@')) return alert("Invalid UPI ID");
+            closeManualEntry();
+            openPaymentSheet(upi);
+        }
+
+        // --- 5. Transaction Details Modal (Split Breakdown with UTRs) ---
+                function openTxnDetails(element) {
+            const txnId = element.getAttribute('data-txnid');
+            const name = element.getAttribute('data-name');
+            const amount = element.getAttribute('data-amount');
+            const date = element.getAttribute('data-date');
+            const splitData = element.getAttribute('data-split');
+            const utrData = element.getAttribute('data-utrs'); // Get UTRs
+
+            document.getElementById('modal-amount').innerText = amount;
+            document.getElementById('modal-receiver').innerText = name;
+            document.getElementById('modal-date').innerText = date;
+            document.getElementById('modal-txnid').innerText = txnId;
+
+            const container = document.getElementById('modal-split-container');
+            container.innerHTML = ""; 
+
+            if (splitData && splitData !== 'None' && splitData !== '') {
+                const chunks = splitData.split(',');
+                const utrs = (utrData && utrData !== 'None') ? utrData.split(',') : [];
+                
+                chunks.forEach((chunk, index) => {
+                    const utr = utrs[index] || `UTR-${Math.floor(Math.random() * 1000000000)}`;
+                    
+                    const row = document.createElement('div');
+                    row.className = "flex justify-between items-center bg-[#121212] p-3 rounded-xl border border-gray-800";
+                    row.innerHTML = `
+                        <div>
+                            <p class="text-sm font-bold text-white">₹${chunk}</p>
+                            <p class="text-[10px] text-gray-500 font-mono">UTR: ${utr}</p>
+                        </div>
+                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    `;
+                    container.appendChild(row);
+                });
+            } // ... (keep the else block)
+             else {
+                const row = document.createElement('div');
+                row.className = "flex justify-between items-center bg-[#121212] p-3 rounded-xl border border-gray-800";
+                row.innerHTML = `
+                    <div>
+                        <p class="text-sm font-bold text-white">₹${amount}</p>
+                        <p class="text-[10px] text-gray-500 font-mono">UTR: TXN${Date.now().toString().slice(-8)}</p>
+                    </div>
+                    <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                `;
+                container.appendChild(row);
+            }
+
+            document.getElementById('txn-modal').classList.remove('hidden');
+        }
+
+        // --- 6. Scanner ---
+        let html5QrCode;
+        function startScanner() {
+            document.getElementById('scanner-container').classList.remove('hidden');
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
+                (decodedText) => {
+                    forceStopScanner();
+                    let payeeAddress = "cafe.mocha@mockupi"; 
+                    if (decodedText.includes("pa=")) payeeAddress = decodedText.split("pa=")[1].split("&")[0];
+                    openPaymentSheet(payeeAddress);
+                }
+            ).catch(err => {
+                alert("Camera Error: " + err); 
+                forceStopScanner();
+            });
+        }
+        
+        function forceStopScanner() {
+            document.getElementById('scanner-container').classList.add('hidden'); 
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => { 
+                    html5QrCode.clear(); 
+                }).catch((err) => {
+                    console.log("Camera stop error: ", err);
+                });
+            }
+        }
+
+        // --- 7. Payment Sheet & Keypads ---
+        let currentPayee = "";
+        let amountStr = "";
+        let pinStr = "";
+
+        function openPaymentSheet(upi) {
+            currentPayee = upi;
+            document.getElementById('payee-name').innerText = upi;
+            document.getElementById('display-amount').innerText = "0";
+            amountStr = ""; pinStr = "";
+            updatePinDots();
+            
+            const sheet = document.getElementById('payment-sheet');
+            sheet.classList.remove('hidden');
+            gsap.to(sheet, { y: 0, duration: 0.3, ease: "power2.out" });
+            document.getElementById('step-amount').classList.remove('hidden');
+            document.getElementById('step-pin').classList.add('hidden');
+        }
+
+        function closePaymentSheet() {
+            const sheet = document.getElementById('payment-sheet');
+            gsap.to(sheet, { y: "100%", duration: 0.3, onComplete: () => sheet.classList.add('hidden') });
+        }
+
+        function pressKey(key) {
+            if (key === '.' && amountStr.includes('.')) return;
+            amountStr += key;
+            document.getElementById('display-amount').innerText = amountStr || "0";
+        }
+        function deleteKey() {
+            amountStr = amountStr.slice(0, -1);
+            document.getElementById('display-amount').innerText = amountStr || "0";
+        }
+        
+        function goToPin() {
+            if (!amountStr || parseFloat(amountStr) <= 0) return alert("Please enter a valid amount");
+            document.getElementById('step-amount').classList.add('hidden');
+            document.getElementById('step-pin').classList.remove('hidden');
+        }
+
+        function updatePinDots() {
+            for (let i = 0; i < 4; i++) {
+                const dot = document.getElementById(`dot-${i}`);
+                if (i < pinStr.length) dot.classList.replace('bg-gray-700', 'bg-white');
+                else dot.classList.replace('bg-white', 'bg-gray-700');
+            }
+        }
+
+        function pressPin(num) {
+            if (pinStr.length >= 4) return;
+            pinStr += num;
+            updatePinDots();
+            if (pinStr.length === 4) setTimeout(executePayment, 300);
+        }
+
+        function deletePin() {
+            pinStr = pinStr.slice(0, -1);
+            updatePinDots();
+        }
+
+        // --- 8. Execute Payment ---
+        function executePayment() {
+            closePaymentSheet();
+            document.getElementById('main-dashboard').innerHTML = `<div class="text-center py-20 h-screen flex flex-col justify-center"><h2 class="text-2xl font-bold text-white animate-pulse">Processing...</h2></div>`;
+            
+            fetch('/api/pay', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ receiver: currentPayee, amount: amountStr, pin: pinStr })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    document.getElementById('main-dashboard').innerHTML = `
+                        <div class="text-center py-10 h-screen flex flex-col justify-center px-4">
+                            <div class="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <svg class="w-12 h-12 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                            </div>
+                            <h2 class="text-3xl font-bold text-white mb-2">₹${amountStr} Paid</h2>
+                            <p class="text-gray-400 text-sm mb-8">To: ${currentPayee}</p>
+                            
+                            <div class="bg-[#121212] p-5 rounded-2xl border border-gray-800 text-left mb-8">
+                                <p class="text-xs text-gray-400 mb-3 uppercase tracking-wider font-bold">Auto-Split Applied</p>
+                                <div class="flex gap-2 flex-wrap">
+                                    ${data.split.map(amt => `<span class="bg-gray-800 text-white px-3 py-1.5 rounded-lg text-sm font-bold border border-gray-700">₹${amt}</span>`).join('')}
+                                </div>
+                            </div>
+                            <button onclick="window.location.reload()" class="w-full bg-white text-black font-bold py-4 rounded-xl text-lg">Back to Home</button>
+                        </div>
+                    `;
+                } else {
+                    alert(data.message);
+                    window.location.reload();
+                }
+            });
         }
     </script>
 </body>
