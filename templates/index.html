@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SplitPay | Futuristic UPI</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- GSAP for animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <!-- QR Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #050505;
+            color: white;
+            overflow: hidden;
+        }
+        /* Crazy animated background gradients */
+        .bg-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(0, 255, 128, 0.15) 0%, rgba(0,0,0,0) 70%);
+            top: -200px;
+            left: -200px;
+            z-index: -1;
+            border-radius: 50%;
+            animation: pulse 8s infinite alternate;
+        }
+        .bg-glow-2 {
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(138, 43, 226, 0.15) 0%, rgba(0,0,0,0) 70%);
+            bottom: -100px;
+            right: -100px;
+            z-index: -1;
+            border-radius: 50%;
+            animation: pulse 10s infinite alternate-reverse;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.5; }
+            100% { transform: scale(1.2); opacity: 1; }
+        }
+        /* Glassmorphism Card */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+        /* Neon Button */
+        .neon-btn {
+            background: linear-gradient(90deg, #00ff88 0%, #00d4ff 100%);
+            color: #000;
+            font-weight: 800;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
+        }
+        .neon-btn:hover {
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.8);
+            transform: translateY(-2px);
+        }
+        /* Scanner Container */
+        #reader {
+            border-radius: 20px;
+            overflow: hidden;
+            border: 2px solid rgba(0, 255, 136, 0.3);
+        }
+        #reader video {
+            border-radius: 18px;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen relative">
+
+    <!-- Background Effects -->
+    <div class="bg-glow"></div>
+    <div class="bg-glow-2"></div>
+
+    <!-- Main App Container -->
+    <div class="glass-card w-full max-w-md p-8 rounded-3xl relative z-10" id="app-container">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight">SplitPay</h1>
+                <p class="text-xs text-gray-400 mt-1">Smart UPI Routing</p>
+            </div>
+            <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center font-bold text-black shadow-lg shadow-green-500/30">
+                A
+            </div>
+        </div>
+
+        <!-- Balance Card -->
+        <div class="glass-card p-5 rounded-2xl mb-6 relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-24 h-24 bg-green-500/10 rounded-full blur-2xl"></div>
+            <p class="text-sm text-gray-400 mb-1">Available Balance</p>
+            <h2 class="text-4xl font-bold">₹50,000<span class="text-lg text-gray-500">.00</span></h2>
+            <p class="text-xs text-green-400 mt-2 flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                UPI ID: demo.user@mockupi
+            </p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <button onclick="showScanner()" class="glass-card p-4 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-white/5 transition cursor-pointer">
+                <div class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
+                </div>
+                <span class="text-sm font-semibold">Scan QR</span>
+            </button>
+            <button class="glass-card p-4 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-white/5 transition cursor-pointer">
+                <div class="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                </div>
+                <span class="text-sm font-semibold">Enter UPI ID</span>
+            </button>
+        </div>
+
+        <!-- Scanner View (Hidden by default) -->
+        <div id="scanner-container" class="hidden mt-4">
+            <div id="reader" class="w-full"></div>
+            <button onclick="stopScanner()" class="mt-4 w-full glass-card py-3 rounded-xl text-sm font-semibold text-red-400 hover:bg-red-500/10 transition">Cancel Scan</button>
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="mt-4">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">Recent Activity</h3>
+            <div class="space-y-3">
+                <div class="flex items-center justify-between glass-card p-3 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-xs">CM</div>
+                        <div>
+                            <p class="text-sm font-semibold">Cafe Mocha</p>
+                            <p class="text-xs text-gray-500">Today, 10:45 AM</p>
+                        </div>
+                    </div>
+                    <p class="text-sm font-bold text-red-400">- ₹6,500</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Javascript Logic -->
+    <script>
+        let html5QrCode;
+
+        // Function to show scanner
+        function showScanner() {
+            // Animate UI out, scanner in
+            gsap.to("#app-container", { duration: 0.3, scale: 0.95, opacity: 0, onComplete: () => {
+                document.getElementById("app-container").classList.add("hidden");
+                document.getElementById("scanner-container").classList.remove("hidden");
+                
+                // Initialize Scanner
+                html5QrCode = new Html5Qrcode("reader");
+                html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    (decodedText, decodedResult) => {
+                        // SUCCESS: QR Code detected!
+                        stopScanner();
+                        
+                        // Show a crazy success animation
+                        gsap.fromTo("body", { backgroundColor: "rgba(0,255,136,0.2)" }, { backgroundColor: "#050505", duration: 1 });
+                        
+                        // Alert the data (we will pass this to backend later)
+                        setTimeout(() => {
+                            alert("QR Scanned Successfully!\nData: " + decodedText);
+                            // window.location.href = `/pay?pa=${encodeURIComponent(decodedText)}`;
+                        }, 500);
+                    },
+                    (errorMessage) => {
+                        // Ignore scanning errors (it fires continuously)
+                    }
+                ).catch((err) => {
+                    alert("Camera Error: " + err);
+                });
+            }});
+        }
+
+        // Function to stop scanner
+        function stopScanner() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    gsap.to("#scanner-container", { duration: 0.3, opacity: 0, onComplete: () => {
+                        document.getElementById("scanner-container").classList.add("hidden");
+                        document.getElementById("app-container").classList.remove("hidden");
+                        gsap.to("#app-container", { duration: 0.3, scale: 1, opacity: 1 });
+                    }});
+                }).catch(err => console.log(err));
+            }
+        }
+    </script>
+</body>
+</html>

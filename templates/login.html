@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SplitPay | Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Outfit', sans-serif; background-color: #050505; color: white; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 100vh;}
+        .bg-glow { position: absolute; width: 600px; height: 600px; background: radial-gradient(circle, rgba(138, 43, 226, 0.15) 0%, rgba(0,0,0,0) 70%); top: -200px; right: -200px; z-index: -1; border-radius: 50%; animation: pulse 8s infinite alternate; }
+        .glass-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.2); opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="bg-glow"></div>
+
+    <!-- Login Container -->
+    <div class="glass-card w-full max-w-sm p-8 rounded-3xl relative z-10" id="login-box">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold tracking-tight">SplitPay</h1>
+            <p class="text-xs text-gray-400 mt-2">Enter your phone number to continue</p>
+        </div>
+
+        <div class="space-y-4">
+            <div class="relative">
+                <span class="absolute left-4 top-3.5 text-gray-400 font-semibold">+91</span>
+                <input type="tel" id="phone" maxlength="10" placeholder="9876543210" class="w-full bg-black/50 border border-white/10 rounded-xl py-3 pl-14 pr-4 text-white focus:outline-none focus:border-green-400 transition">
+            </div>
+            <button onclick="login()" class="w-full bg-gradient-to-r from-green-400 to-blue-500 text-black font-bold py-3 rounded-xl hover:shadow-[0_0_20px_rgba(0,255,136,0.5)] transition">
+                Continue
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function login() {
+            const phone = document.getElementById('phone').value;
+            if(phone.length < 10) {
+                alert("Please enter a 10-digit number");
+                return;
+            }
+            
+            // GSAP Animation: Slide up and fade out
+            gsap.to("#login-box", { 
+                duration: 0.5, 
+                y: -50, 
+                opacity: 0, 
+                onComplete: () => {
+                    // Save phone to local storage (so we know who is logged in)
+                    localStorage.setItem('userPhone', phone);
+                    // Redirect to main dashboard
+                    window.location.href = '/'; 
+                }
+            });
+        }
+    </script>
+</body>
+</html>
