@@ -1,10 +1,13 @@
+import re
+import io
+import csv
 import json
 import uuid
 import random
-import re
-from urllib.parse import urlparse, parse_qs, unquote
+from datetime import datetime, timedelta
+from urllib.parse import unquote
 
-from flask import Flask, render_template, request, jsonify, session, redirect
+from flask import Flask, render_template, request, jsonify, session, redirect, Response
 from sqlalchemy import inspect
 from models import db, User, Transaction
 
@@ -16,6 +19,7 @@ app.secret_key = 'splitpay_super_secret_key'
 db.init_app(app)
 
 SPLIT_LIMIT = 2000
+IST = timedelta(hours=5, minutes=30)
 
 
 def init_db():
@@ -45,13 +49,23 @@ def init_db():
 init_db()
 
 
+# ---------------- HELPERS ----------------
+
 def current_user():
     if 'user_phone' not in session:
         return None
     return User.query.filter_by(phone=session['user_phone']).first()
 
 
+def merchant_only():
+    user = current_user()
+    if not user or user.role != 'merchant':
+        return None
+    return user
+
+
 def clean_upi(value):
+    """Finds name@bank inside a plain ID or a full upi://pay?pa=... QR string."""
     value = unquote((value or '').strip())
     m = re.search(r'[\w.\-]+@[\w.\-]+', value)
     return m.group(0).lower() if m else ''
@@ -115,6 +129,7 @@ def setup_pin():
 def logout():
     session.clear()
     return redirect('/login')
+
 
 @app.route('/merchant')
 def merchant():
@@ -299,6 +314,8 @@ def bank_transfer():
     receiver = User.query.filter_by(bank_account=account, ifsc_code=ifsc).first()
     if not receiver:
         return jsonify({"status": "error", "message": "Bank account not found"}), 404
+    if receiver.id == sender.id:
+        return jsonify({"status": "error", "message": "Cannot pay yourself"}), 400
 
     chunks, utrs = split_amount(amount)
 
@@ -318,6 +335,8 @@ def bank_transfer():
 
     return jsonify({"status": "success", "txn_id": txn.txn_id, "splits": chunks, "utrs": utrs})
 
+
+# ---------------- MERCHANT APIs ----------------
 
 @app.route('/api/merchant/received')
 def merchant_received():
@@ -340,6 +359,127 @@ def merchant_received():
             "timestamp": t.timestamp.strftime("%d %b %Y, %I:%M %p")
         } for t in txns]
     })
+
+
+@app.route('/api/merchant/stats')
+def merchant_stats():
+    user = merchant_only()
+    if not user:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+
+    txns = Transaction.query.filter_by(receiver_upi=user.upi_id).all()
+    today = (datetime.utcnow() + IST).date()
+
+    def day_of(t):
+        return (t.timestamp + IST).date()
+
+    today_total = sum(t.amount for t in txns if day_of(t) == today)
+    week_total = sum(t.amount for t in txns if 0 <= (today - day_of(t)).days < 7)
+    month_total = sum(t.amount for t in txns
+                      if day_of(t).year == today.year and day_of(t).month == today.month)
+    total = sum(t.amount for t in txns)
+    count = len(txns)
+    chunks = sum(len(json.loads(t.split_data)) for t in txns if t.split_data)
+
+    daily = []
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        daily.append({
+            "label": day.strftime("%a"),
+            "amount": sum(t.amount for t in txns if day_of(t) == day)
+        })
+
+    return jsonify({
+        "status": "success",
+        "balance": user.balance,
+        "today": today_total,
+        "week": week_total,
+        "month": month_total,
+        "total": total,
+        "count": count,
+        "average": round(total / count, 2) if count else 0,
+        "chunks": chunks,
+        "daily": daily,
+        "bank_account": user.bank_account,
+        "ifsc": user.ifsc_code
+    })
+
+
+@app.route('/api/merchant/export')
+def merchant_export():
+    user = merchant_only()
+    if not user:
+        return redirect('/login')
+
+    txns = Transaction.query.filter_by(receiver_upi=user.upi_id)\
+        .order_by(Transaction.timestamp.desc()).all()
+
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Txn ID", "From", "Amount", "Chunks", "UTRs", "Date (IST)"])
+    for t in txns:
+        splits = json.loads(t.split_data) if t.split_data else []
+        utrs = json.loads(t.split_utrs) if t.split_utrs else []
+        w.writerow([
+            t.txn_id, t.sender_upi, t.amount,
+            " + ".join(str(int(s)) if float(s).is_integer() else str(s) for s in splits),
+            " | ".join(utrs),
+            (t.timestamp + IST).strftime("%d-%m-%Y %I:%M %p")
+        ])
+
+    return Response(
+        out.getvalue(),
+        mimetype='text/csv',
+        headers={"Content-Disposition": "attachment; filename=splitpay_received.csv"}
+    )
+
+
+@app.route('/api/merchant/settle', methods=['POST'])
+def merchant_settle():
+    user = merchant_only()
+    if not user:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+
+    data = request.json or {}
+    pin = data.get('pin')
+    account = (data.get('account_no') or '').strip()
+    ifsc = (data.get('ifsc') or '').strip().upper()
+    try:
+        amount = float(data.get('amount', 0))
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "Invalid amount"}), 400
+
+    if user.upi_pin != pin:
+        return jsonify({"status": "error", "message": "Incorrect UPI PIN"}), 400
+    if amount <= 0:
+        return jsonify({"status": "error", "message": "Invalid amount"}), 400
+    if amount > user.balance:
+        return jsonify({"status": "error", "message": "Insufficient balance"}), 400
+
+    # First settlement: save the bank details on the merchant account
+    if not user.bank_account:
+        if not account or not ifsc:
+            return jsonify({"status": "error", "message": "Enter bank account and IFSC"}), 400
+        if User.query.filter(User.bank_account == account, User.id != user.id).first():
+            return jsonify({"status": "error", "message": "Bank account already linked to another user"}), 400
+        user.bank_account = account
+        user.ifsc_code = ifsc
+
+    utr = str(random.randint(10**11, 10**12 - 1))
+    user.balance -= amount
+
+    txn = Transaction(
+        txn_id=str(uuid.uuid4())[:8],
+        sender_upi=user.upi_id,
+        receiver_upi=f"bank{user.bank_account[-4:]}@settlement",
+        amount=amount,
+        split_data=json.dumps([amount]),
+        split_utrs=json.dumps([utr])
+    )
+    db.session.add(txn)
+    db.session.commit()
+
+    return jsonify({"status": "success", "utr": utr, "balance": user.balance})
 
 
 if __name__ == '__main__':
