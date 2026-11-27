@@ -694,33 +694,45 @@
             });
         }
 
-        // --- 10. KEYBOARD SUPPORT (The magic you asked for) ---
-        document.addEventListener('keydown', function(event) {
-            const paymentSheet = document.getElementById('payment-sheet');
-            const isPaymentSheetOpen = !paymentSheet.classList.contains('hidden');
-            const stepAmount = document.getElementById('step-amount');
-            const isAmountScreen = !stepAmount.classList.contains('hidden');
-
-            // If the payment bottom sheet is NOT open, ignore keystrokes
-            if (!isPaymentSheetOpen) return;
+        // --- 10. GLOBAL KEYBOARD SUPPORT (Fixed) ---
+                document.addEventListener('keydown', function(event) {
+            // Ignore keyboard shortcuts if user is typing in an input field (like Search or UPI ID)
+            if (event.target.tagName === 'INPUT') return;
 
             const key = event.key;
-
-            // Handle Backspace
-            if (key === 'Backspace') {
-                event.preventDefault();
-                if (isAmountScreen) deleteKey();
-                else deletePin();
+            
+            // 1. Handle the Balance PIN Modal
+            const balanceModal = document.getElementById('balance-pin-modal');
+            if (!balanceModal.classList.contains('hidden')) {
+                if (key === 'Backspace') {
+                    event.preventDefault();
+                    balancePinStr = balancePinStr.slice(0, -1);
+                    updateBalancePinDots();
+                } else if (/^[0-9]$/.test(key)) {
+                    pressBalancePin(key);
+                }
                 return;
             }
 
-            // Handle Numbers and Decimal
-            if (/^[0-9.]$/.test(key)) {
-                if (isAmountScreen) {
-                    pressKey(key);
-                } else {
-                    // Only allow numbers for the PIN, ignore the dot
-                    if (key !== '.') pressPin(key);
+            // 2. Handle the Payment Bottom Sheet
+            const paymentSheet = document.getElementById('payment-sheet');
+            if (!paymentSheet.classList.contains('hidden')) {
+                const stepAmount = document.getElementById('step-amount');
+                const isAmountScreen = !stepAmount.classList.contains('hidden');
+
+                if (key === 'Backspace') {
+                    event.preventDefault();
+                    if (isAmountScreen) deleteKey();
+                    else deletePin();
+                    return;
+                }
+
+                if (/^[0-9.]$/.test(key)) {
+                    if (isAmountScreen) {
+                        pressKey(key);
+                    } else {
+                        if (key !== '.') pressPin(key);
+                    }
                 }
             }
         });
