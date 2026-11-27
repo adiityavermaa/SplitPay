@@ -1,6 +1,9 @@
 import json
 import uuid
 import random
+import re
+from urllib.parse import urlparse, parse_qs, unquote
+
 from flask import Flask, render_template, request, jsonify, session, redirect
 from sqlalchemy import inspect
 from models import db, User, Transaction
@@ -48,6 +51,32 @@ def current_user():
     return User.query.filter_by(phone=session['user_phone']).first()
 
 
+def clean_upi(value):
+    value = unquote((value or '').strip())
+    m = re.search(r'[\w.\-]+@[\w.\-]+', value)
+    return m.group(0).lower() if m else ''
+
+
+def split_amount(amount):
+    chunks = []
+    remaining = amount
+    while remaining > SPLIT_LIMIT:
+        chunks.append(float(SPLIT_LIMIT))
+        remaining -= SPLIT_LIMIT
+    if remaining > 0:
+        chunks.append(round(remaining, 2))
+    utrs = [str(random.randint(10**11, 10**12 - 1)) for _ in chunks]
+    return chunks, utrs
+
+
+def home_for(user, needs_pin=False):
+    if needs_pin:
+        return '/setup-pin'
+    if user.role == 'merchant':
+        return '/merchant'
+    return '/'
+
+
 # ---------------- PAGES ----------------
 
 @app.route('/')
@@ -87,13 +116,12 @@ def logout():
     session.clear()
     return redirect('/login')
 
-
 @app.route('/merchant')
 def merchant():
     user = current_user()
     if not user or user.role != 'merchant':
         return redirect('/login')
-    return render_template('merchant.html')
+    return render_template('merchant.html', merchant_upi=user.upi_id)
 
 
 # ---------------- AUTH APIs ----------------
@@ -117,16 +145,24 @@ def verify_otp():
         return jsonify({"status": "error", "message": "Invalid OTP"}), 400
 
     user = User.query.filter_by(phone=phone).first()
-    is_new = False
     if not user:
-        is_new = True
         user = User(phone=phone, upi_id=f"user{phone[-4:]}@mockupi")
         db.session.add(user)
         db.session.commit()
 
     session['user_phone'] = phone
-    needs_pin = is_new or not user.upi_pin
-    return jsonify({"status": "success", "needs_pin": needs_pin, "role": user.role})
+    needs_pin = not user.upi_pin
+    target = home_for(user, needs_pin)
+
+    return jsonify({
+        "status": "success",
+        "needs_pin": needs_pin,
+        "role": user.role,
+        "redirect": target,
+        "redirect_url": target,
+        "next": target,
+        "url": target
+    })
 
 
 @app.route('/api/set-pin', methods=['POST'])
@@ -145,12 +181,20 @@ def set_pin():
     user.upi_pin = pin
     user.role = role
     db.session.commit()
-    return jsonify({"status": "success", "role": user.role})
+
+    target = home_for(user)
+    return jsonify({
+        "status": "success",
+        "role": user.role,
+        "redirect": target,
+        "redirect_url": target,
+        "next": target,
+        "url": target
+    })
 
 
 # ---------------- BALANCE APIs ----------------
 
-# Returns ONLY the UPI ID (balance is no longer leaked on page load)
 @app.route('/api/get-balance')
 def get_balance():
     if 'user_phone' not in session:
@@ -161,7 +205,6 @@ def get_balance():
     return jsonify({"upi_id": user.upi_id})
 
 
-# Balance is returned only if the PIN matches the one stored in the DB
 @app.route('/api/check-balance', methods=['POST'])
 def check_balance():
     if 'user_phone' not in session:
@@ -186,7 +229,8 @@ def pay():
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
     data = request.json or {}
-    receiver_upi = data.get('receiver_upi')
+    # index.html sends the receiver as "receiver"
+    receiver_upi = clean_upi(data.get('receiver') or data.get('receiver_upi'))
     pin = data.get('pin')
     try:
         amount = float(data.get('amount', 0))
@@ -200,21 +244,13 @@ def pay():
     if amount > sender.balance:
         return jsonify({"status": "error", "message": "Insufficient balance"}), 400
 
-    receiver = User.query.filter_by(upi_id=receiver_upi).first()
+    receiver = User.query.filter(db.func.lower(User.upi_id) == receiver_upi).first()
     if not receiver:
-        return jsonify({"status": "error", "message": "Receiver not found"}), 404
+        return jsonify({"status": "error", "message": f"Receiver not found: '{receiver_upi}'"}), 404
     if receiver.id == sender.id:
         return jsonify({"status": "error", "message": "Cannot pay yourself"}), 400
 
-    chunks = []
-    remaining = amount
-    while remaining > SPLIT_LIMIT:
-        chunks.append(float(SPLIT_LIMIT))
-        remaining -= SPLIT_LIMIT
-    if remaining > 0:
-        chunks.append(round(remaining, 2))
-
-    utrs = [str(random.randint(10**11, 10**12 - 1)) for _ in chunks]
+    chunks, utrs = split_amount(amount)
 
     sender.balance -= amount
     receiver.balance += amount
@@ -246,8 +282,9 @@ def bank_transfer():
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
     data = request.json or {}
-    account = data.get('account')
-    ifsc = data.get('ifsc')
+    # index.html sends the account number as "account_no"
+    account = (data.get('account_no') or data.get('account') or '').strip()
+    ifsc = (data.get('ifsc') or '').strip().upper()
     pin = data.get('pin')
     try:
         amount = float(data.get('amount', 0))
@@ -263,14 +300,7 @@ def bank_transfer():
     if not receiver:
         return jsonify({"status": "error", "message": "Bank account not found"}), 404
 
-    chunks = []
-    remaining = amount
-    while remaining > SPLIT_LIMIT:
-        chunks.append(float(SPLIT_LIMIT))
-        remaining -= SPLIT_LIMIT
-    if remaining > 0:
-        chunks.append(round(remaining, 2))
-    utrs = [str(random.randint(10**11, 10**12 - 1)) for _ in chunks]
+    chunks, utrs = split_amount(amount)
 
     sender.balance -= amount
     receiver.balance += amount
