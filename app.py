@@ -20,12 +20,13 @@ with app.app_context():
     if os.path.exists(db_path):
         inspector = inspect(db.engine)
         try:
-            columns = [col['name'] for col in inspector.get_columns('transactions')]
-            # If we add new columns in the future, add them to this list
-            if 'split_utrs' not in columns or 'txn_id' not in columns:
+            # Check if new columns exist. If not, we must reset the DB.
+            user_cols = [col['name'] for col in inspector.get_columns('users')]
+            txn_cols = [col['name'] for col in inspector.get_columns('transactions')]
+            
+            if 'bank_account' not in user_cols or 'split_utrs' not in txn_cols:
                 reset_db = True
         except Exception:
-            # If the table doesn't exist yet, we just create it
             reset_db = False
             
     if reset_db:
@@ -37,7 +38,14 @@ with app.app_context():
 
     # Seed default Merchant (Cafe Mocha)
     if not User.query.filter_by(upi_id='cafe.mocha@mockupi').first():
-        merchant = User(phone='9999999999', upi_id='cafe.mocha@mockupi', balance=0.0, role='merchant')
+        merchant = User(
+            phone='9999999999', 
+            upi_id='cafe.mocha@mockupi', 
+            balance=0.0, 
+            role='merchant',
+            bank_account="1234567890",
+            ifsc_code="MOCK0001234"
+        )
         db.session.add(merchant)
         db.session.commit()
 
@@ -54,7 +62,6 @@ def root():
         session.clear()
         return redirect(url_for('login_page'))
         
-    # Fetch recent transactions for the customer
     txns = Transaction.query.filter_by(sender_upi=user.upi_id).order_by(Transaction.id.desc()).limit(10).all()
     return render_template('index.html', transactions=txns)
 
@@ -121,7 +128,7 @@ def get_balance():
         return jsonify({"error": "User not found"}), 404
     return jsonify({"balance": user.balance, "upi_id": user.upi_id})
 
-# --- PAYMENT API & SPLIT ENGINE ---
+# --- PAYMENT APIs ---
 @app.route('/api/pay', methods=['POST'])
 def process_payment():
     data = request.json
@@ -135,7 +142,7 @@ def process_payment():
     if not sender or sender.upi_pin != pin:
         return jsonify({"status": "error", "message": "Incorrect UPI PIN"}), 400
     if not receiver:
-        return jsonify({"status": "error", "message": "Receiver not found"}), 404
+        return jsonify({"status": "error", "message": "Receiver UPI ID not found"}), 404
     if sender.balance < amount:
         return jsonify({"status": "error", "message": "Insufficient Balance"}), 400
         
@@ -150,7 +157,7 @@ def process_payment():
         
     split_string = ",".join(str(x) for x in split_chunks)
 
-    # 2. GENERATE UNIQUE UTRs FOR EACH CHUNK
+    # 2. GENERATE UNIQUE UTRs
     utrs = []
     for _ in split_chunks:
         utr = f"UTR{int(time.time())}{random.randint(1000, 9999)}"
@@ -176,6 +183,41 @@ def process_payment():
         "split": split_chunks, 
         "utrs": utrs 
     })
+
+@app.route('/api/bank_transfer', methods=['POST'])
+def bank_transfer():
+    data = request.json
+    amount = float(data.get('amount'))
+    account_no = data.get('account_no')
+    ifsc = data.get('ifsc')
+    pin = data.get('pin')
+    
+    sender = User.query.filter_by(phone=session['user_phone']).first()
+    
+    if not sender or sender.upi_pin != pin:
+        return jsonify({"status": "error", "message": "Incorrect UPI PIN"}), 400
+    if sender.balance < amount:
+        return jsonify({"status": "error", "message": "Insufficient Balance"}), 400
+    if len(account_no) < 8 or len(ifsc) < 8:
+        return jsonify({"status": "error", "message": "Invalid Account Number or IFSC"}), 400
+        
+    # Deduct money (Mocking that it went to a real bank)
+    sender.balance -= amount
+    
+    # Log the transaction (Receiver UPI will be set to the Bank Account)
+    receiver_string = f"BANK:{account_no[-4:]}"
+    
+    txn = Transaction(
+        sender_upi=sender.upi_id, 
+        receiver_upi=receiver_string, 
+        amount=amount, 
+        split_data=f"{amount}", 
+        split_utrs=f"UTR{int(time.time())}{random.randint(1000, 9999)}"
+    )
+    db.session.add(txn)
+    db.session.commit()
+    
+    return jsonify({"status": "success", "message": "Bank transfer successful"})
 
 # --- MERCHANT ROUTES ---
 @app.route('/merchant')
