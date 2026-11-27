@@ -362,14 +362,13 @@
         let myUpiId = "";
         let realBalance = 0;
 
-        fetch('/api/get-balance').then(res => res.json()).then(data => {
-            if(data.balance !== undefined) {
-                realBalance = data.balance;
-                myUpiId = data.upi_id;
-                document.getElementById('upi-id-display').innerText = `${data.upi_id}`;
-                document.getElementById('my-upi-id-display').innerText = `${data.upi_id}`;
-            }
-        });
+        fetch('/api/get-balance')
+    .then(res => res.json())
+    .then(data => {
+        myUpiId = data.upi_id;
+        document.getElementById('upi-id-display').innerText = data.upi_id;
+        document.getElementById('my-upi-id-display').innerText = data.upi_id;
+    });
 
         // --- 2. Check Balance Logic & Toggle ---
         let balancePinStr = "";
@@ -426,17 +425,37 @@
         }
 
         function pressBalancePin(num) {
-            if (balancePinStr.length >= 4) return;
-            balancePinStr += num;
-            updateBalancePinDots();
-            
-            if (balancePinStr.length === 4) {
-                setTimeout(() => {
+    if (balancePinStr.length >= 4) return;
+    balancePinStr += num;
+    updateBalancePinDots();
+
+    if (balancePinStr.length === 4) {
+        setTimeout(() => {
+            fetch('/api/check-balance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: balancePinStr })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    realBalance = data.balance;
                     closeBalancePinModal();
-                    showBalance(); 
-                }, 300);
-            }
-        }
+                    showBalance();
+                } else {
+                    alert(data.message);
+                    balancePinStr = "";
+                    updateBalancePinDots();
+                }
+            })
+            .catch(() => {
+                alert("An error occurred.");
+                balancePinStr = "";
+                updateBalancePinDots();
+            });
+        }, 300);
+    }
+}
 
         // --- 3. Search Bar Filter ---
         function filterTransactions() {
